@@ -62,6 +62,7 @@ dropzone.addEventListener('drop', e => {
   selectFile(e.dataTransfer.files[0]);
 });
 $('remove-file').addEventListener('click', () => {
+  if (sending || uncertain) return;
   chosenFile = null; fileInput.value = ''; fileInput.required = true;
   $('selected-file').hidden = true; feedback.hidden = true; fileInput.focus();
 });
@@ -79,8 +80,11 @@ form.addEventListener('submit', async e => {
     if (!input.value.trim()) { showError('Preencha todos os campos obrigatórios.'); input.focus(); return; }
   }
   if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test($('email').value.trim())) { showError('Informe um único endereço de e-mail válido.'); $('email').focus(); return; }
-  const fileHeader = new Uint8Array(await chosenFile.slice(0, 4).arrayBuffer());
-  if (fileHeader[0] !== 0x50 || fileHeader[1] !== 0x4b || fileHeader[2] !== 0x03 || fileHeader[3] !== 0x04) { showError('O arquivo não tem o formato esperado para um XLSX. Abra o plano no Excel e salve-o como .xlsx.'); return; }
+  sending = true; lockForm(true);
+  let fileHeader;
+  try { fileHeader = new Uint8Array(await chosenFile.slice(0, 4).arrayBuffer()); }
+  catch { sending=false; lockForm(false); showError('Não foi possível ler o arquivo. Selecione-o novamente.'); return; }
+  if (fileHeader[0] !== 0x50 || fileHeader[1] !== 0x4b || fileHeader[2] !== 0x03 || fileHeader[3] !== 0x04) { sending=false; lockForm(false); showError('O arquivo não tem o formato esperado para um XLSX. Abra o plano no Excel e salve-o como .xlsx.'); return; }
   // O payload contém somente os campos do contrato de recepção.
   const payload = new FormData();
   for (const name of ['nome', 'email', 'cliente', 'campanha_projeto', 'parecer', 'observacao']) payload.append(name, form.elements.namedItem(name).value.trim());
