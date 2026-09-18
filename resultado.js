@@ -10,12 +10,22 @@ function message(s){$('message').textContent=s;$('message').hidden=!s;}
 function element(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;}
 function summary(meta){const list=$('plan-summary');list.replaceChildren();for(const [k,l] of [['cliente','Cliente'],['campanha','Campanha'],['nome_arquivo','Arquivo'],['versao_plano','Versão do plano'],['revisao_plano','Revisão do plano'],['data_ultima_revisao','Última revisão'],['versao_gabarito','Gabarito aplicado']]){const g=document.createElement('div');g.append(element('dt',l),element('dd',meta?.[k]||'Não informado'));list.append(g);}}
 function findingTitle(a){const map={TOTAL_DIVERGENTE:'Total divergente',FORMULA_TOTAL_INADEQUADA:'Fórmula do total',FORMULA_INADEQUADA:'Fórmula inadequada',CAMPO_AUSENTE:'Campo ausente',VALOR_DIVERGENTE:'Valor divergente'};return map[a.tipo_achado||a.tipo]||'Ponto para revisão';}
-function findingAction(a){if(a.acao||a.acao_sugerida)return a.acao||a.acao_sugerida;const tipo=a.tipo_achado||a.tipo;if(tipo==='FORMULA_TOTAL_INADEQUADA'||tipo==='FORMULA_INADEQUADA')return 'Revise a fórmula na célula indicada e confirme se ela soma apenas linhas do mesmo tipo de compra e KPI.';if(tipo==='TOTAL_DIVERGENTE'||tipo==='VALOR_DIVERGENTE')return 'Confira as linhas de origem indicadas, refaça a soma e ajuste o total do bloco se necessário.';if(tipo==='CAMPO_AUSENTE')return 'Preencha o campo indicado no plano e confirme se ele pertence ao escopo Internet.';return 'Confira a célula indicada no plano e valide o valor com a equipe de mídia.';}
+function findingValue(...values){for(const value of values){if((typeof value==='string'||typeof value==='number')&&String(value).trim()!=='')return String(value).trim();}return '';}
+function findingAction(a){
+ const cell=findingValue(a.celula),sheet=findingValue(a.aba);
+ const column=findingValue(a.coluna)||(cell.match(/^\$?([A-Z]+)\$?\d+$/i)?.[1]||'');
+ const field=findingValue(a.campo_canonico,a.campo);
+ const location=[sheet?`na aba ${sheet}`:'no plano',column?`coluna ${column}`:'',cell?`célula ${cell}`:(a.linha?`linha ${a.linha}`:''),!column&&field?`campo ${field}`:''].filter(Boolean).join(', ');
+ const expected=findingValue(a.esperado,a.valor_correto);
+ const tipo=a.tipo_achado||a.tipo;
+ const verb=tipo==='CAMPO_AUSENTE'?'Preencha o campo indicado':(tipo==='FORMULA_TOTAL_INADEQUADA'||tipo==='FORMULA_INADEQUADA'?'Confira a fórmula':'Confira o valor');
+ return `${verb} ${location}. ${expected?`Resultado esperado: ${expected}.`:'O resultado esperado não foi informado pela auditoria; confira os dados de origem antes de alterar.'}`;
+}
 function findings(){const list=$('findings');list.replaceChildren();const all=Array.isArray(result?.detalhes)?result.detalhes:[];const q=norm($('search').value),severity=$('severity').value;const filtered=all.filter(a=>(!severity||norm(a.severidade).startsWith(severity))&&(!q||norm([a.veiculo,a.aba,a.campo,a.campo_canonico,a.id_regra,a.descricao,a.kpi,a.tipo_compra].join(' ')).includes(q)));
  $('detail-count').textContent=filtered.length+' de '+all.length+' itens exibidos'+(result?.detalhes_truncados?' · lista parcial; consulte o Word.':'.');
  if(!all.length){list.append(element('p',result?.finalizado?'Nenhum detalhe disponível nesta consulta. Confira o Word e a cobertura antes de interpretar o resultado.':'Os detalhes aparecerão após o processamento.'));return;}
  for(const a of filtered){const card=element('article','', 'finding-card');card.append(element('span',[a.severidade,findingTitle(a)].filter(Boolean).join(' · '),'finding-tag'),element('h4',a.veiculo||a.campo_canonico||a.campo||'Item para revisão'),element('p',[a.aba,a.celula?('célula '+a.celula):(a.linha?'linha '+a.linha:''),a.tipo_compra,a.kpi].filter(Boolean).join(' · '),'finding-location'));
-  const found=String(a.encontrado??a.valor_atual??'').trim(), expected=String(a.esperado??a.valor_correto??'').trim();
+  const found=findingValue(a.encontrado,a.valor_atual), expected=findingValue(a.esperado,a.valor_correto);
   const what=element('div','', 'finding-explanation');what.append(element('strong','O que foi encontrado'),element('p',a.descricao||((found||expected)?`Encontrado: ${found||'não informado'} · Esperado: ${expected||'não informado'}`:'Confira o item indicado no plano.')));card.append(what);
   const how=element('div','', 'finding-explanation finding-action');how.append(element('strong','Como corrigir'),element('p',findingAction(a)));card.append(how);list.append(card);}
 }
