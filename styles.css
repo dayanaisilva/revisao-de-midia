@@ -10,3 +10,24 @@ body,.main{background:var(--brand-cream-soft)}
 .primary{background:var(--brand-gold);color:var(--brand-brown);text-decoration:none}
 .topline a{color:#80591b;text-underline-offset:4px}
 #access-form{display:grid;gap:20px}select{font:inherit;padding:12px;border:1px solid #d8cbb8;border-radius:8px;background:white;color:var(--ink)}select:focus-visible{outline:3px solid #80591b;outline-offset:4px}
+
+/* Apresentação: paleta neutra em preto, branco e cinza concreto. */
+:root{--neutral-black:#111;--neutral-ink:#222;--neutral-gray:#6b6b6b;--neutral-concrete:#d1d1d1;--neutral-light:#f4f4f4;--neutral-white:#fff}
+body,.main{background:var(--neutral-white);color:var(--neutral-ink)}
+.sidebar{background:var(--neutral-black);color:var(--neutral-white)}
+.brand-dot,h1 span{color:var(--neutral-concrete)}
+.intro .eyebrow,.scope-label,.steps li>span{color:var(--neutral-concrete)}
+.intro p,.scope p,.steps p,.sidebar-footer{color:#d6d6d6}
+.scope{border-color:#444}.scope svg{color:var(--neutral-concrete)}.steps li>span{border-color:#666}
+.topline a,.additional summary,.dropzone u,.receipt button,.lookup-panel summary{color:var(--neutral-ink)}
+.notice{border-left-color:var(--neutral-black);background:var(--neutral-light)}
+.notice span,.heading p,.field small,.dropzone>span,.dropzone small,.submit-row p,.required-note,.main-footer,.result-note{color:var(--neutral-gray)}
+input:not([type=file]),textarea,select{border-color:var(--neutral-concrete);color:var(--neutral-ink)}
+input:not([type=file]):hover,textarea:hover{border-color:var(--neutral-gray)}
+input:focus,textarea:focus,select:focus{border-color:var(--neutral-black)}
+.dropzone{border-color:var(--neutral-gray);background:var(--neutral-light)}.dropzone.dragover,.dropzone:hover{background:#e8e8e8;border-color:var(--neutral-black)}.upload-icon{color:var(--neutral-black)}
+.selected-file{border-color:var(--neutral-concrete);background:var(--neutral-light)}.selected-file>svg{color:var(--neutral-black)}
+.primary{background:var(--neutral-black);color:var(--neutral-white)}.primary:hover:not(:disabled){background:#333}.primary:disabled{background:var(--neutral-concrete);color:#555}
+.secondary{border-color:var(--neutral-concrete);background:var(--neutral-white);color:var(--neutral-ink)}
+.receipt,.audit-progress{background:var(--neutral-light);border-color:var(--neutral-concrete)}.audit-progress{border-left-color:var(--neutral-black)}.lookup-panel{border-color:var(--neutral-concrete)}
+.feedback{color:#444;background:#f1f1f1;border-color:var(--neutral-concrete)}.internal{background:var(--neutral-light)}
