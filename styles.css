@@ -31,3 +31,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--neutral-black)}
 .secondary{border-color:var(--neutral-concrete);background:var(--neutral-white);color:var(--neutral-ink)}
 .receipt,.audit-progress{background:var(--neutral-light);border-color:var(--neutral-concrete)}.audit-progress{border-left-color:var(--neutral-black)}.lookup-panel{border-color:var(--neutral-concrete)}
 .feedback{color:#444;background:#f1f1f1;border-color:var(--neutral-concrete)}.internal{background:var(--neutral-light)}
+
+.finding-card{border:1px solid var(--neutral-concrete);border-radius:12px;padding:20px;margin:14px 0;background:var(--neutral-white)}
+.finding-tag{display:inline-block;color:var(--neutral-gray);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.finding-card h4{font-size:20px;margin:10px 0 6px;color:var(--neutral-ink)}
+.finding-location{font-size:13px;color:var(--neutral-gray);margin:0 0 18px}
+.finding-explanation{border-top:1px solid var(--neutral-concrete);padding-top:12px;margin-top:12px}
+.finding-explanation strong{font-size:13px;color:var(--neutral-ink)}
+.finding-explanation p{margin:5px 0 0;color:var(--neutral-gray);line-height:1.55}
+.finding-action{background:var(--neutral-light);border-radius:8px;padding:12px;margin-top:14px;border-top:0}
