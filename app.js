@@ -8,6 +8,12 @@ let chosenFile = null;
 let sending = false;
 let uncertain = false;
 let receiptId = '';
+let receiptEmail = '';
+let pollTimer = null;
+let pollGeneration = 0;
+let pollAttempts = 0;
+let statusBusy = false;
+let downloadBusy = false;
 const configuredEndpoint = window.MEDIA_UPLOAD_CONFIG?.endpoint || '';
 let endpoint = null;
 if (configuredEndpoint) {
@@ -75,7 +81,7 @@ form.addEventListener('submit', async e => {
   if (sending || uncertain || !endpoint) return;
   if (!form.reportValidity()) return;
   if (!chosenFile) { showError('Selecione o plano de mídia em .xlsx.'); fileInput.focus(); return; }
-  for (const name of ['nome', 'email', 'cliente', 'campanha_projeto']) {
+  for (const name of ['nome', 'email', 'cliente', 'campanha_projeto', 'data_ultima_revisao', 'versao_plano', 'revisao_plano']) {
     const input = form.elements.namedItem(name);
     if (!input.value.trim()) { showError('Preencha todos os campos obrigatórios.'); input.focus(); return; }
   }
@@ -87,7 +93,7 @@ form.addEventListener('submit', async e => {
   if (fileHeader[0] !== 0x50 || fileHeader[1] !== 0x4b || fileHeader[2] !== 0x03 || fileHeader[3] !== 0x04) { sending=false; lockForm(false); showError('O arquivo não tem o formato esperado para um XLSX. Abra o plano no Excel e salve-o como .xlsx.'); return; }
   // O payload contém somente os campos do contrato de recepção.
   const payload = new FormData();
-  for (const name of ['nome', 'email', 'cliente', 'campanha_projeto', 'parecer', 'observacao']) payload.append(name, form.elements.namedItem(name).value.trim());
+  for (const name of ['nome', 'email', 'cliente', 'campanha_projeto', 'parecer', 'observacao', 'data_ultima_revisao', 'versao_plano', 'revisao_plano']) payload.append(name, form.elements.namedItem(name).value.trim());
   payload.append('arquivo_plano', chosenFile, chosenFile.name);
   const recipient = $('email').value.trim();
   sending = true; lockForm(true); feedback.hidden = true;
@@ -106,9 +112,17 @@ form.addEventListener('submit', async e => {
     }
     if (!response.ok || result.recebido !== true || result.status_auditoria !== 'RECEBIDO' || !/^AUD-[a-zA-Z0-9-]+$/.test(result.id_auditoria || '')) throw new Error('UNCONFIRMED');
     receiptId = result.id_auditoria;
+    receiptEmail = recipient;
+    const summary=$('receipt-summary');summary.replaceChildren();
+    for(const [key,label] of [['nome_solicitante','Solicitante'],['cliente','Cliente'],['campanha','Campanha'],['nome_arquivo','Arquivo'],['data_ultima_revisao','Última revisão'],['versao_plano','Versão'],['revisao_plano','Revisão']]){
+      const group=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');
+      dt.textContent=label;dd.textContent=result.resumo?.[key]||'Não informado';group.append(dt,dd);summary.append(group);
+    }
+    $('receipt-link').href='resultado.html#id='+encodeURIComponent(receiptId);
     $('receipt-id').textContent = receiptId;
     $('confirmation-detail').textContent = result.status_email_confirmacao === 'ENVIADO_GMAIL' ? `A confirmação foi enviada para ${recipient}.` : `O registro foi concluído. A confirmação por e-mail está pendente; guarde este identificador.`;
     $('form-panel').hidden = true; $('success-panel').hidden = false; $('success-panel').focus();
+
   } catch {
     uncertain = true;
     showError('Não conseguimos confirmar o recebimento nesta página. O plano pode ter sido registrado. Confira seu e-mail e fale com a equipe antes de enviar novamente, para evitar duplicidade.');
@@ -122,6 +136,9 @@ $('copy-id').addEventListener('click', async () => {
   catch { $('copy-id').textContent = 'Selecione e copie o identificador acima'; }
 });
 $('new-submission').addEventListener('click', () => {
+
+  try { sessionStorage.removeItem('sicoob-receipt'); } catch {}
+  receiptEmail = '';
   form.reset(); chosenFile = null; fileInput.value = ''; fileInput.required = true;
   sending = false; uncertain = false; receiptId = '';
   $('selected-file').hidden = true; feedback.hidden = true;
@@ -131,3 +148,4 @@ $('new-submission').addEventListener('click', () => {
   lockForm(false); $('nome').focus();
 });
 window.addEventListener('beforeunload', e => { if (sending) { e.preventDefault(); e.returnValue = ''; } });
+

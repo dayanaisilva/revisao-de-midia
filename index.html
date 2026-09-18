@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="Envie seu plano de mídia para auditoria no escopo Internet.">
-  <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#003641">
+  <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#003641">
   <title>Enviar plano de mídia</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css">
   <script src="config.js" defer></script><script src="app.js" defer></script>
@@ -13,13 +13,13 @@
 <div class="shell">
  <aside class="sidebar">
   <header class="identity"><span class="site-name">Revisão de mídia<span class="brand-dot">.</span></span></header>
-  <div class="intro"><span class="eyebrow">AUDITORIA DE MÍDIA</span><h1>Revise aqui <br> o seu<br><span> plano de mídia.</span></h1><p> Envie o arquivo e aguarde para recebe por e-mail um relatório com os pontos que precisam da sua atenção.</p></div>
+  <div class="intro"><span class="eyebrow">AUDITORIA DE MÍDIA</span><h1>Revise aqui<br>o seu<br><span>plano de mídia.</span></h1><p>Envie seu plano, acompanhe a análise e baixe o relatório. Você também recebe uma cópia por e-mail.</p></div>
   <div class="scope"><span class="scope-label">ESCOPO DESTA VERSÃO</span><div><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><strong>Internet</strong></div><p>A conclusão se limita às verificações executadas. O arquivo original não é alterado.</p></div>
-  <ol class="steps"><li><span>01</span><div><strong>Envie seu plano</strong><p>Um arquivo Excel por solicitação.</p></div></li><li><span>02</span><div><strong>Receba a confirmação</strong><p>Seu envio fica registrado com um identificador.</p></div></li><li><span>03</span><div><strong>Confira o relatório</strong><p>Os resultados chegam ao e-mail informado.</p></div></li></ol>
+  <ol class="steps"><li><span>01</span><div><strong>Envie seu plano</strong><p>Um arquivo Excel por solicitação.</p></div></li><li><span>02</span><div><strong>Receba a confirmação</strong><p>Seu envio fica registrado com um identificador.</p></div></li><li><span>03</span><div><strong>Confira o relatório</strong><p>Baixe o Word aqui e receba por e-mail.</p></div></li></ol>
   <footer class="sidebar-footer">Ferramenta de apoio à revisão de planos de mídia</footer>
  </aside>
  <main class="main">
-  <div class="topline"><span>PLANOS DE MÍDIA</span><span class="internal">Uso interno</span></div>
+  <div class="topline"><span>PLANOS DE MÍDIA</span><a href="resultado.html">Consultar auditoria →</a></div>
   <section id="form-panel" class="form-panel" aria-labelledby="form-title">
    <div class="heading"><h2 id="form-title">Enviar um plano</h2><p>Preencha seus dados e anexe o Excel para começar.</p></div>
    <div id="setup-notice" class="notice" role="status"><strong>Prévia da página</strong><span>O envio ainda está em preparação. Você já pode conferir os campos e selecionar um arquivo, sem transmitir dados.</span></div>
@@ -32,6 +32,11 @@
      <div class="field"><label for="cliente">Cliente <span aria-hidden="true">*</span></label><input id="cliente" name="cliente" placeholder="Nome do cliente" required maxlength="200"></div>
      <div class="field"><label for="campanha">Campanha / projeto <span aria-hidden="true">*</span></label><input id="campanha" name="campanha_projeto" required maxlength="240" placeholder="Nome da campanha"></div>
     </div>
+    <div class="grid revision-fields">
+     <div class="field"><label for="data_ultima_revisao">Data da última revisão *</label><input id="data_ultima_revisao" name="data_ultima_revisao" type="date" required></div>
+     <div class="field"><label for="versao_plano">Número da versão *</label><input id="versao_plano" name="versao_plano" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" placeholder="Ex.: 3" required></div>
+     <div class="field"><label for="revisao_plano">Número da revisão *</label><input id="revisao_plano" name="revisao_plano" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" placeholder="Ex.: 4" required></div>
+    </div><p class="required-note">Informe a identificação do arquivo enviado. Esses dados serão comparados com a CAPA.</p>
     <details class="additional"><summary>Adicionar parecer ou observação <span>Opcional</span></summary><div class="grid"><div class="field"><label for="parecer">Parecer</label><textarea id="parecer" name="parecer" rows="3" maxlength="5000" placeholder="Contexto para a revisão"></textarea></div><div class="field"><label for="observacao">Observação</label><textarea id="observacao" name="observacao" rows="3" maxlength="5000" placeholder="Algo que a equipe precisa saber?"></textarea></div></div></details>
     </fieldset>
     <fieldset><legend><span>03</span> Arquivo do plano</legend>
@@ -46,8 +51,14 @@
     <p class="required-note">* Campos obrigatórios</p>
    </form>
   </section>
-  <section id="success-panel" class="success-panel" hidden tabindex="-1" aria-labelledby="success-title"><div class="success-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></div><span class="eyebrow">ENVIO REGISTRADO</span><h2 id="success-title">Plano recebido.</h2><p>Guarde o identificador abaixo para acompanhar esta solicitação com a equipe.</p><div class="receipt"><span>IDENTIFICADOR DA AUDITORIA</span><strong id="receipt-id"></strong><button type="button" id="copy-id">Copiar identificador</button></div><p id="confirmation-detail"></p><p class="result-note">Seu plano aguarda processamento. O resultado será enviado por e-mail após a conclusão. O recebimento não representa aprovação.</p><button type="button" class="primary" id="new-submission">Enviar outro plano</button></section>
-  <footer class="main-footer"><span>Auditoria de planos · Internet</span><span>criado para auditoria</span></footer>
+  <section id="success-panel" class="success-panel" hidden tabindex="-1" aria-labelledby="success-title">
+   <span class="eyebrow">ENVIO REGISTRADO</span><h2 id="success-title">Plano recebido.</h2><p>Seu plano está na fila de auditoria. Guarde o identificador abaixo.</p>
+   <div class="receipt"><span>IDENTIFICADOR DA AUDITORIA</span><strong id="receipt-id"></strong><button type="button" id="copy-id">Copiar identificador</button></div>
+   <dl id="receipt-summary" class="summary-grid"></dl><p id="confirmation-detail"></p>
+   <p>O e-mail de confirmação contém sua chave de acesso. Ela protege a consulta e o download do relatório.</p>
+   <div class="result-actions"><a id="receipt-link" class="primary" href="resultado.html">Consultar auditoria</a><button type="button" class="secondary" id="new-submission">Enviar outro plano</button></div>
+  </section>
+  <footer class="main-footer"><span>Auditoria de planos · Internet</span><span>criado por Pingado Midia</span></footer>
  </main>
 </div>
 </body></html>
