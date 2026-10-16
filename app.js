@@ -19,7 +19,7 @@ let endpoint = null;
 if (configuredEndpoint) {
   try {
     const url = new URL(configuredEndpoint);
-    if (url.protocol === 'https:' && url.hostname === 'loggiadigital.app.n8n.cloud' && url.pathname.startsWith('/webhook/') && !url.username && !url.password && !url.search && !url.hash) endpoint = url.href;
+    if (url.protocol === 'https:' && url.hostname === 'agente-de-midia.onrender.com' && url.pathname === '/api/audits' && !url.username && !url.password && !url.search && !url.hash) endpoint = url.href;
   } catch { /* Sem destino válido, nenhum dado é transmitido. */ }
 }
 if (endpoint) {

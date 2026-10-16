@@ -34,4 +34,4 @@ npm test
 npm start
 ```
 
-Depois que o serviço estiver publicado e validado, `config.js` pode ser alterado para apontar o site para as rotas do Render. Até lá, o portal continua usando diretamente os webhooks atuais do n8n.
+O `config.js` aponta o portal para as rotas do Render. O navegador não acessa diretamente os webhooks do n8n.

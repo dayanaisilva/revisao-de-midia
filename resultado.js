@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 const labels={RECEBIDO:['Na fila','Seu plano foi recebido e aguarda processamento.'],EM_PROCESSAMENTO:['Em análise','A auditoria está verificando o plano e preparando o relatório.'],CONCLUIDO_SEM_ACHADOS:['Concluída sem achados','Nenhum achado nas verificações executadas. Confira a cobertura abaixo.'],CONCLUIDO_COM_ACHADOS:['Concluída com pontos para revisão','Veja os itens abaixo e confira as células indicadas no plano.'],INCONCLUSIVO:['Análise parcial','Há resultados disponíveis, mas faltam informações para uma conclusão completa.'],ERRO_TECNICO:['Processamento interrompido','O envio continua registrado. A equipe precisa conferir a ocorrência antes de retomar.']};
 let credentials=null, result=null, busy=false, timer=null, generation=0, attempts=0;
 let endpoint=null;
-try{const u=new URL(window.MEDIA_UPLOAD_CONFIG?.statusEndpoint);if(u.protocol==='https:'&&u.hostname==='loggiadigital.app.n8n.cloud'&&u.pathname==='/webhook/consultar-auditoria-sicoob'&&!u.search&&!u.hash&&!u.username&&!u.password)endpoint=u.href;}catch{}
+try{const u=new URL(window.MEDIA_UPLOAD_CONFIG?.statusEndpoint);if(u.protocol==='https:'&&u.hostname==='agente-de-midia.onrender.com'&&u.pathname==='/api/audits/status'&&!u.search&&!u.hash&&!u.username&&!u.password)endpoint=u.href;}catch{}
 const idPattern=/^AUD-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 function message(s){$('message').textContent=s;$('message').hidden=!s;}
