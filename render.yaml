@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: agente-de-midia
+    runtime: node
+    buildCommand: node --version
+    startCommand: node server.mjs
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: ALLOWED_ORIGINS
+        value: https://dayanaisilva.github.io
+      - key: N8N_AUDIT_URL
+        sync: false
+      - key: N8N_STATUS_URL
+        sync: false
