@@ -40,3 +40,5 @@ input:focus,textarea:focus,select:focus{border-color:var(--neutral-black)}
 .finding-explanation strong{font-size:13px;color:var(--neutral-ink)}
 .finding-explanation p{margin:5px 0 0;color:var(--neutral-gray);line-height:1.55}
 .finding-action{background:var(--neutral-light);border-radius:8px;padding:12px;margin-top:14px;border-top:0}
+.finding-card-warning{border-left:4px solid #777;background:#fafafa}
+.finding-card-warning .finding-tag{color:#444}
