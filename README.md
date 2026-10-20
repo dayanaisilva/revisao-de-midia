@@ -14,7 +14,7 @@ Portal e serviço central do Agente de Mídia da Loggia.
 - `GET /health`: saúde da central.
 - `GET /api/capabilities`: integrações já habilitadas.
 - `POST /api/route`: classifica uma solicitação como `AUDIT`, `AUDIT_STATUS` ou `KNOWLEDGE`.
-- `POST /api/audits`: encaminha um plano XLSX ao webhook de auditoria.
+- `POST /api/audits`: encaminha um plano XLSX enviado pelo computador ou a referência de um arquivo compartilhado no Google Drive ao webhook de auditoria.
 - `POST /api/audits/status`: consulta o andamento ou o resultado no n8n.
 
 O proxy não grava o XLSX e não registra o conteúdo do plano em logs.
