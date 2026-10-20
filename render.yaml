@@ -15,3 +15,5 @@ services:
         sync: false
       - key: N8N_STATUS_URL
         sync: false
+      - key: N8N_CORRECTION_URL
+        sync: false
