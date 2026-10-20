@@ -127,25 +127,37 @@ async function readJson(req, maxBytes = 64 * 1024) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function validateCorrectionPayload(body) {
+export function validateCorrectionPayload(body) {
   const id = typeof body?.id_auditoria === 'string' ? body.id_auditoria.trim() : '';
   const key = typeof body?.chave_acesso === 'string' ? body.chave_acesso.trim().toLowerCase() : '';
-  const correction = body?.correcao && typeof body.correcao === 'object' && !Array.isArray(body.correcao) ? body.correcao : {};
   const clean = value => typeof value === 'string' ? value.trim() : '';
+  const rawCorrections = Array.isArray(body?.correcoes)
+    ? body.correcoes
+    : body?.correcao && typeof body.correcao === 'object' && !Array.isArray(body.correcao)
+      ? [body.correcao]
+      : [];
+  if (!rawCorrections.length || rawCorrections.length > 100) throw new Error('CORRECAO_INVALIDA');
+  const corrections = rawCorrections.map(correction => ({
+    sheet: clean(correction?.sheet).slice(0, 200),
+    cell: clean(correction?.cell).replace(/\$/g, '').toUpperCase().slice(0, 30),
+    before: clean(correction?.before).slice(0, 2000),
+    after: clean(correction?.after).slice(0, 2000),
+    ruleId: clean(correction?.ruleId).slice(0, 200),
+    wasMissing: correction?.wasMissing === true,
+  }));
   const result = {
     id_auditoria: id,
     chave_acesso: key,
-    correcao: {
-      sheet: clean(correction.sheet).slice(0, 200),
-      cell: clean(correction.cell).replace(/\$/g, '').toUpperCase().slice(0, 30),
-      before: clean(correction.before).slice(0, 2000),
-      after: clean(correction.after).slice(0, 2000),
-      ruleId: clean(correction.ruleId).slice(0, 200),
-    },
+    correcoes: corrections,
   };
   if (!/^AUD-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id)) throw new Error('CORRECAO_INVALIDA');
   if (!/^[a-f0-9]{64}$/.test(key)) throw new Error('CORRECAO_INVALIDA');
-  if (!result.correcao.sheet || !/^[A-Z]{1,3}[1-9]\d{0,6}$/.test(result.correcao.cell) || !result.correcao.before || !result.correcao.after) throw new Error('CORRECAO_INVALIDA');
+  const seen = new Set();
+  for (const correction of corrections) {
+    const location = correction.sheet.toLocaleUpperCase('pt-BR') + '!' + correction.cell;
+    if (!correction.sheet || !/^[A-Z]{1,3}[1-9]\d{0,6}$/.test(correction.cell) || !correction.after || (!correction.before && !correction.wasMissing) || seen.has(location)) throw new Error('CORRECAO_INVALIDA');
+    seen.add(location);
+  }
   return result;
 }
 
@@ -194,7 +206,7 @@ async function correctDrivePlan(req, res, config) {
     const patcher = globalThis.XlsxFormulaPatcher;
     if (!patcher?.applyCorrections) throw new Error('CORRECAO_INDISPONIVEL');
     const sourceFile = { name: file.nome, size: bytes.length, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
-    const output = await patcher.applyCorrections(sourceFile, [input.correcao], input.id_auditoria);
+    const output = await patcher.applyCorrections(sourceFile, input.correcoes, input.id_auditoria);
     if (source.sha256 && output.inputHash !== source.sha256) throw new Error('ARQUIVO_ORIGINAL_ATUALIZADO');
     const outputBytes = Buffer.from(await output.blob.arrayBuffer());
     const saved = await correctionRequest(config.correctionUrl, {
@@ -203,7 +215,7 @@ async function correctDrivePlan(req, res, config) {
       chave_acesso: input.chave_acesso,
       sha256_antes: output.inputHash,
       sha256_depois: output.outputHash,
-      correcao_json: JSON.stringify({ ...input.correcao, timestamp: output.timestamp, historySheet: output.historySheet }),
+      correcao_json: JSON.stringify({ correcoes: input.correcoes, timestamp: output.timestamp, historySheet: output.historySheet }),
     }, { name: output.fileName, bytes: outputBytes }, controller.signal);
     return json(res, 200, {
       ok: true,

@@ -188,7 +188,19 @@
     const result = xml.replace(/<c\b[^>]*\/>|<c\b[^>]*>[\s\S]*?<\/c>/gi, block => {
       if (changed || String(attribute(block.match(/^<c\b[^>]*>/i)?.[0] || '', 'r')).replace(/\$/g, '').toUpperCase() !== target) return block;
       const formula = block.match(/<f\b([^>]*)>([\s\S]*?)<\/f>/i);
-      if (!formula) fail('A célula ' + target + ' não contém uma fórmula editável.');
+      if (!formula) {
+        if (String(before ?? '').trim()) fail('A célula ' + target + ' não contém a fórmula auditada. Nenhuma alteração foi feita.');
+        const opening = block.match(/^<c\b[^>]*>/i)?.[0] || '';
+        const type = attribute(opening, 't').toLowerCase();
+        if (type === 's' || type === 'inlinestr' || /<is\b/i.test(block)) fail('A célula ' + target + ' contém texto e não pode receber fórmula automaticamente.');
+        changed = true;
+        const formulaXml = '<f>' + xmlEscape(String(after).replace(/^=/, '')) + '</f>';
+        if (/\/>\s*$/i.test(block)) return block.replace(/\/>\s*$/i, '>' + formulaXml + '<v></v></c>');
+        let updated = block.replace(/^<c\b[^>]*>/i, match => match + formulaXml);
+        updated = updated.replace(/<v\b[^>]*>[\s\S]*?<\/v>/i, '<v></v>');
+        if (!/<v\b/i.test(updated)) updated = updated.replace(/<\/c>\s*$/i, '<v></v></c>');
+        return updated;
+      }
       if (/\bt\s*=\s*(["'])shared\1/i.test(formula[1])) fail('A célula ' + target + ' usa uma fórmula compartilhada e exige revisão manual.');
       actual = xmlDecode(formula[2]);
       if (normalizeFormula(actual) !== normalizeFormula(before)) fail('A fórmula de ' + target + ' não corresponde à versão auditada. Nenhuma alteração foi feita.');
