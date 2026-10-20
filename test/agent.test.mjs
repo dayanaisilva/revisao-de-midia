@@ -31,10 +31,11 @@ test('expõe saúde e capacidades sem transmitir dados', async t => {
   const { port } = server.address();
 
   const health = await fetch(`http://127.0.0.1:${port}/health`).then(r => r.json());
-  assert.deepEqual(health, { ok: true, service: 'agente-de-midia', audit: true });
+  assert.deepEqual(health, { ok: true, service: 'agente-de-midia', audit: true, driveCorrection: false });
 
   const capabilities = await fetch(`http://127.0.0.1:${port}/api/capabilities`).then(r => r.json());
   assert.equal(capabilities.agent, 'Agente de Mídia');
   assert.equal(capabilities.audit, true);
+  assert.equal(capabilities.driveCorrection, false);
   assert.equal(capabilities.slack, false);
 });
