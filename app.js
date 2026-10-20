@@ -2,6 +2,7 @@
 const $ = id => document.getElementById(id);
 const form = $('upload-form');
 const fileInput = $('arquivo');
+const driveLinkInput = $('link_drive');
 const submit = $('submit-button');
 const feedback = $('feedback');
 let chosenFile = null;
@@ -14,6 +15,7 @@ let pollGeneration = 0;
 let pollAttempts = 0;
 let statusBusy = false;
 let downloadBusy = false;
+let sourceMode = 'upload';
 const configuredEndpoint = window.MEDIA_UPLOAD_CONFIG?.endpoint || '';
 let endpoint = null;
 if (configuredEndpoint) {
@@ -56,6 +58,27 @@ function selectFile(file) {
   $('file-state').textContent = (file.size >= 1024 * 1024 ? (file.size / (1024 * 1024)).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' MB' : Math.ceil(file.size / 1024).toLocaleString('pt-BR') + ' KB') + ' · pronto para enviar';
   $('selected-file').hidden = false;
 }
+function parseGoogleDriveLink(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    if (url.protocol !== 'https:' || url.hostname !== 'drive.google.com') return null;
+    const fileMatch = url.pathname.match(/^\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+    const openId = url.hostname === 'drive.google.com' && url.pathname === '/open' ? url.searchParams.get('id') : '';
+    const id = fileMatch?.[1] || (/^[a-zA-Z0-9_-]{10,}$/.test(openId || '') ? openId : '');
+    return id ? { id, url: url.href } : null;
+  } catch { return null; }
+}
+function setSourceMode(mode) {
+  if (sending || uncertain) return;
+  sourceMode = mode === 'drive_link' ? 'drive_link' : 'upload';
+  const usingDrive = sourceMode === 'drive_link';
+  $('upload-source').hidden = usingDrive;
+  $('drive-source').hidden = !usingDrive;
+  fileInput.required = !usingDrive && !chosenFile;
+  driveLinkInput.required = usingDrive;
+  feedback.hidden = true;
+}
+for (const control of form.elements.namedItem('origem_plano')) control.addEventListener('change', event => setSourceMode(event.target.value));
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length > 1) { showError('Envie apenas um plano por solicitação.'); return; }
   selectFile(fileInput.files[0]);
@@ -80,25 +103,34 @@ form.addEventListener('submit', async e => {
   e.preventDefault();
   if (sending || uncertain || !endpoint) return;
   if (!form.reportValidity()) return;
-  if (!chosenFile) { showError('Selecione o plano de mídia em .xlsx.'); fileInput.focus(); return; }
+  const driveFile = sourceMode === 'drive_link' ? parseGoogleDriveLink(driveLinkInput.value) : null;
+  if (sourceMode === 'upload' && !chosenFile) { showError('Selecione o plano de mídia em .xlsx.'); fileInput.focus(); return; }
+  if (sourceMode === 'drive_link' && !driveFile) { showError('Informe um link válido de arquivo do Google Drive. Links de pasta não podem ser auditados.'); driveLinkInput.focus(); return; }
   for (const name of ['nome', 'email', 'cliente', 'campanha_projeto', 'data_ultima_revisao', 'versao_plano', 'revisao_plano']) {
     const input = form.elements.namedItem(name);
     if (!input.value.trim()) { showError('Preencha todos os campos obrigatórios.'); input.focus(); return; }
   }
   if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test($('email').value.trim())) { showError('Informe um único endereço de e-mail válido.'); $('email').focus(); return; }
   sending = true; lockForm(true);
-  let fileHeader;
-  try { fileHeader = new Uint8Array(await chosenFile.slice(0, 4).arrayBuffer()); }
-  catch { sending=false; lockForm(false); showError('Não foi possível ler o arquivo. Selecione-o novamente.'); return; }
-  if (fileHeader[0] !== 0x50 || fileHeader[1] !== 0x4b || fileHeader[2] !== 0x03 || fileHeader[3] !== 0x04) { sending=false; lockForm(false); showError('O arquivo não tem o formato esperado para um XLSX. Abra o plano no Excel e salve-o como .xlsx.'); return; }
+  if (sourceMode === 'upload') {
+    let fileHeader;
+    try { fileHeader = new Uint8Array(await chosenFile.slice(0, 4).arrayBuffer()); }
+    catch { sending=false; lockForm(false); showError('Não foi possível ler o arquivo. Selecione-o novamente.'); return; }
+    if (fileHeader[0] !== 0x50 || fileHeader[1] !== 0x4b || fileHeader[2] !== 0x03 || fileHeader[3] !== 0x04) { sending=false; lockForm(false); showError('O arquivo não tem o formato esperado para um XLSX. Abra o plano no Excel e salve-o como .xlsx.'); return; }
+  }
   // O payload contém somente os campos do contrato de recepção.
   const payload = new FormData();
   for (const name of ['nome', 'email', 'cliente', 'campanha_projeto', 'parecer', 'observacao', 'data_ultima_revisao', 'versao_plano', 'revisao_plano']) payload.append(name, form.elements.namedItem(name).value.trim());
-  payload.append('arquivo_plano', chosenFile, chosenFile.name);
+  payload.append('origem_plano', sourceMode);
+  if (sourceMode === 'upload') payload.append('arquivo_plano', chosenFile, chosenFile.name);
+  else {
+    payload.append('link_drive', driveFile.url);
+    payload.append('drive_file_id', driveFile.id);
+  }
   const recipient = $('email').value.trim();
   sending = true; lockForm(true); feedback.hidden = true;
   $('submit-label').textContent = 'Enviando plano…';
-  $('file-state').textContent = 'Enviando. Aguarde a confirmação.';
+  if (sourceMode === 'upload') $('file-state').textContent = 'Enviando. Aguarde a confirmação.';
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 120000);
   try {
@@ -140,6 +172,7 @@ $('new-submission').addEventListener('click', () => {
   try { sessionStorage.removeItem('sicoob-receipt'); } catch {}
   receiptEmail = '';
   form.reset(); chosenFile = null; fileInput.value = ''; fileInput.required = true;
+  driveLinkInput.value = ''; driveLinkInput.required = false; setSourceMode('upload');
   sending = false; uncertain = false; receiptId = '';
   $('selected-file').hidden = true; feedback.hidden = true;
   $('success-panel').hidden = true; $('form-panel').hidden = false;
