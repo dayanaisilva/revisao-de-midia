@@ -61,8 +61,10 @@ function selectFile(file) {
 function parseGoogleDriveLink(value) {
   try {
     const url = new URL(String(value || '').trim());
-    if (url.protocol !== 'https:' || url.hostname !== 'drive.google.com') return null;
-    const fileMatch = url.pathname.match(/^\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+    if (url.protocol !== 'https:' || !['drive.google.com', 'docs.google.com'].includes(url.hostname)) return null;
+    const fileMatch = url.hostname === 'drive.google.com'
+      ? url.pathname.match(/^\/file\/d\/([a-zA-Z0-9_-]{10,})/)
+      : url.pathname.match(/^\/spreadsheets\/d\/([a-zA-Z0-9_-]{10,})/);
     const openId = url.hostname === 'drive.google.com' && url.pathname === '/open' ? url.searchParams.get('id') : '';
     const id = fileMatch?.[1] || (/^[a-zA-Z0-9_-]{10,}$/.test(openId || '') ? openId : '');
     return id ? { id, url: url.href } : null;
@@ -105,7 +107,7 @@ form.addEventListener('submit', async e => {
   if (!form.reportValidity()) return;
   const driveFile = sourceMode === 'drive_link' ? parseGoogleDriveLink(driveLinkInput.value) : null;
   if (sourceMode === 'upload' && !chosenFile) { showError('Selecione o plano de mídia em .xlsx.'); fileInput.focus(); return; }
-  if (sourceMode === 'drive_link' && !driveFile) { showError('Informe um link válido de arquivo do Google Drive. Links de pasta não podem ser auditados.'); driveLinkInput.focus(); return; }
+  if (sourceMode === 'drive_link' && !driveFile) { showError('Informe um link válido de arquivo do Google Drive ou Google Sheets. Links de pasta não podem ser auditados.'); driveLinkInput.focus(); return; }
   for (const name of ['nome', 'email', 'cliente', 'campanha_projeto', 'data_ultima_revisao', 'versao_plano', 'revisao_plano']) {
     const input = form.elements.namedItem(name);
     if (!input.value.trim()) { showError('Preencha todos os campos obrigatórios.'); input.focus(); return; }
