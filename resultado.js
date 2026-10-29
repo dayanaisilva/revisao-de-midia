@@ -64,6 +64,11 @@ function formulaPtBr(value) {
 }
 
 const financialFields = new Set(['TABELA_TOTAL_BRUTO', 'HONORARIOS', 'DEMAIS_ACRESCIMOS_DESCONTOS', 'VALOR_LIQUIDO', 'VALOR_100', 'INVESTIMENTO']);
+const canonicalColumns = new Map([
+  ['TOTAL_DE_INSERCOES', 'T'], ['TABELA_UNITARIO', 'U'], ['TABELA_TOTAL_BRUTO', 'V'],
+  ['DESCONTO', 'W'], ['NEGOCIADO_UNITARIO', 'X'], ['HONORARIOS', 'Y'],
+  ['DEMAIS_ACRESCIMOS_DESCONTOS', 'Z'], ['VALOR_LIQUIDO', 'AA'], ['VALOR_100', 'AB'],
+]);
 function isFinancial(item) { const field = norm(item.campo_canonico || item.campo), cell = findingValue(item.celula).toUpperCase(); return financialFields.has(field) || /^(V|Y|Z|AA|AB)\d+$/.test(cell); }
 function displayValue(item, value) {
   if (!value || !isFinancial(item)) return value || '';
@@ -146,16 +151,26 @@ function eligibleCorrections() {
 }
 
 function findingExplanation(item) {
-  const found = displayValue(item, findingValue(item.encontrado, item.valor_atual)), expected = displayValue(item, findingValue(item.esperado, item.valor_correto)), detail = findingValue(item.detalhe, item.descricao), parts = [];
+  const found = displayValue(item, findingValue(item.encontrado, item.valor_atual)), expected = displayValue(item, findingValue(item.esperado, item.valor_correto)), detail = findingValue(item.detalhe, item.descricao), parts = [], location = findingLocation(item);
+  if (norm(item.tipo_achado || item.tipo).includes('TOTAL_DIVERGENTE') && location.cell !== '—') parts.push(`A divergência está na célula ${location.cell}, coluna ${location.column}, linha ${location.row}.`);
   if (detail) parts.push(detail);
   if (found || expected) parts.push(`Valor encontrado: ${found || 'não informado'}. Valor esperado: ${expected || 'não informado'}.`);
   if (findingValue(item.veiculo).includes('|')) parts.push('As plataformas listadas mostram a composição do total; não representam um erro separado em cada plataforma.');
   if (isPending(item)) parts.push('Esta pendência indica limite de validação, não um erro confirmado no plano.');
   return parts.join(' ') || 'Confira o item indicado no plano.';
 }
+function findingLocation(item) {
+  const rawCell = findingValue(item.celula).replace(/\$/g, '').toUpperCase();
+  const rawColumn = findingValue(item.coluna).toUpperCase();
+  const canonical = norm(item.campo_canonico || item.campo || rawColumn).replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const row = findingValue(item.linha) || rawCell.match(/(\d+)$/)?.[1] || '—';
+  const column = rawCell.match(/^([A-Z]+)\d+$/)?.[1] || (/^[A-Z]{1,3}$/.test(rawColumn) ? rawColumn : '') || canonicalColumns.get(canonical) || '—';
+  const cell = rawCell || (column !== '—' && row !== '—' ? `${column}${row}` : '—');
+  return { row, column, cell };
+}
 function findingAction(item) {
-  const cell = findingValue(item.celula), sheet = findingValue(item.aba), column = findingValue(item.coluna) || (cell.match(/^\$?([A-Z]+)\$?\d+$/i)?.[1] || ''), expected = displayValue(item, findingValue(item.esperado, item.valor_correto));
-  const location = [sheet ? `aba ${sheet}` : 'plano', item.linha ? `linha ${item.linha}` : '', column ? `coluna ${column}` : '', cell ? `célula ${cell}` : ''].filter(Boolean).join(' · ');
+  const precise = findingLocation(item), sheet = findingValue(item.aba), expected = displayValue(item, findingValue(item.esperado, item.valor_correto));
+  const location = [sheet ? `aba ${sheet}` : 'plano', precise.row !== '—' ? `linha ${precise.row}` : '', precise.column !== '—' ? `coluna ${precise.column}` : '', precise.cell !== '—' ? `célula ${precise.cell}` : ''].filter(Boolean).join(' · ');
   if (isWarning(item)) return item.tipo_achado === 'AVISO_COMPOSICAO_KPI' ? 'Nenhuma correção é necessária. A composição fica registrada apenas como aviso.' : 'Este item é informativo e não reprova o plano.';
   if (isPending(item)) return 'Complete ou esclareça a informação indicada e execute uma nova auditoria. Não altere o plano apenas com base nesta pendência.';
   const formula = formulaCandidate(item);
@@ -197,7 +212,7 @@ function findings() {
     top.append(element('span', warning ? 'Aviso · não reprova' : pending ? 'Pendência · não é erro confirmado' : `${severity} · ${findingTitle(item)}`, `finding-tag severity-${severityClass}`));
     if (item.id_regra) top.append(element('span', item.id_regra, 'rule-chip'));
     card.append(top, element('h4', findingHeading(item)));
-    const cell = findingValue(item.celula), column = findingValue(item.coluna) || cell.match(/^\$?([A-Z]+)\$?\d+$/i)?.[1] || '—', row = findingValue(item.linha) || cell.match(/(\d+)$/)?.[1] || '—';
+    const { cell, column, row } = findingLocation(item);
     const location = element('div', '', 'location-grid');
     for (const [label, value] of [['Aba', findingValue(item.aba) || '—'], ['Linha', row], ['Coluna', column], ['Célula', cell || '—']]) { const field = element('div'); field.append(element('span', label), element('strong', value)); location.append(field); }
     card.append(location);
