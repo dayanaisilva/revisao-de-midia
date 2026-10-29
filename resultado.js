@@ -29,6 +29,20 @@ const element = (tag, text = '', className = '') => { const node = document.crea
 const findingValue = (...values) => { for (const value of values) if ((typeof value === 'string' || typeof value === 'number') && String(value).trim() !== '') return String(value).trim(); return ''; };
 function message(text) { $('message').textContent = text; $('message').hidden = !text; }
 
+function parsedFinding(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim().startsWith('{')) return null;
+  try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null; } catch { return null; }
+}
+function normalizeFinding(raw) {
+  const item = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const embedded = parsedFinding(item.registro_original) || parsedFinding(item.detalhe) || parsedFinding(item.descricao);
+  const original = parsedFinding(embedded?.registro_original) || embedded;
+  if (!original) return item;
+  const cleanDetail = findingValue(original.detalhe, original.descricao);
+  return { ...item, ...original, detalhe: cleanDetail, descricao: cleanDetail };
+}
+
 function summary(meta) {
   const list = $('plan-summary'); list.replaceChildren();
   for (const [key, label] of [['cliente', 'Cliente'], ['campanha', 'Campanha'], ['nome_arquivo', 'Arquivo'], ['versao_plano', 'Versão do plano'], ['revisao_plano', 'Revisão do plano'], ['data_ultima_revisao', 'Última revisão'], ['versao_gabarito', 'Gabarito aplicado']]) {
@@ -105,7 +119,7 @@ function severityLabel(value) {
   return value || 'Revisão';
 }
 function findingTitle(item) {
-  const map = { TOTAL_DIVERGENTE: 'Total divergente', FORMULA_TOTAL_INADEQUADA: 'Fórmula do total', FORMULA_INADEQUADA: 'Fórmula inadequada', FORMULA_AUSENTE: 'Fórmula ausente', CAMPO_AUSENTE: 'Campo ausente', VALOR_DIVERGENTE: 'Valor divergente', AVISO_COMPOSICAO_KPI: 'Composição de compras e KPIs', PENDENCIA: 'Validação pendente' };
+  const map = { TOTAL_DIVERGENTE: 'Total divergente', FORMULA_TOTAL_INADEQUADA: 'Fórmula do total', FORMULA_INADEQUADA: 'Fórmula inadequada', FORMULA_AUSENTE: 'Fórmula ausente', CAMPO_AUSENTE: 'Campo ausente', VALOR_DIVERGENTE: 'Valor divergente', AVISO_COMPOSICAO_KPI: 'Composição de compras e KPIs', AVISO_ARREDONDAMENTO: 'Diferença de arredondamento', PENDENCIA: 'Validação pendente' };
   return map[item.tipo_achado || item.tipo] || (isWarning(item) ? 'Aviso informativo' : isPending(item) ? 'Validação pendente' : 'Ponto para revisão');
 }
 function findingHeading(item) {
@@ -118,9 +132,10 @@ function formulaCandidate(item) {
   const cell = findingValue(item.celula).replace(/\$/g, '').toUpperCase();
   const row = Number(cell.match(/^[A-Z]{1,3}([1-9]\d*)$/)?.[1] || item.linha || 0);
   let formula = findingValue(item.formula_esperada, item.formula_referencia);
+  const totalRule = norm(item.tipo_achado || item.tipo).includes('TOTAL_DIVERGENTE') || /^INT-01(3|6|7|8)$/.test(findingValue(item.id_regra));
   if (formula && row) formula = formula.replace(/\{linha\}/gi, String(row));
   const hasCanonicalNames = /TOTAL_DE_INSERCOES|TABELA_UNITARIO|TABELA_TOTAL_BRUTO/i.test(formula);
-  if ((!formula || hasCanonicalNames) && row && /^V\d+$/.test(cell)) {
+  if ((!formula || hasCanonicalNames) && !totalRule && row && /^V\d+$/.test(cell)) {
     const purchase = norm(item.tipo_compra);
     if (/\bCPM\b|\bCPPM\b/.test(purchase)) formula = `=T${row}*U${row}/1000`;
     else if (/\b(CPC|CPE|CPV|CPA|CPL|CPI|CPD|CPVTR|UNITARIO|UNIDADE|DIARIA|PACOTE)\b/.test(purchase)) formula = `=T${row}*U${row}`;
@@ -154,6 +169,11 @@ function findingExplanation(item) {
   const found = displayValue(item, findingValue(item.encontrado, item.valor_atual)), expected = displayValue(item, findingValue(item.esperado, item.valor_correto)), detail = findingValue(item.detalhe, item.descricao), parts = [], location = findingLocation(item);
   if (norm(item.tipo_achado || item.tipo).includes('TOTAL_DIVERGENTE') && location.cell !== '—') parts.push(`A divergência está na célula ${location.cell}, coluna ${location.column}, linha ${location.row}.`);
   if (detail) parts.push(detail);
+  if (!detail && norm(item.tipo_achado || item.tipo) === 'FORMULA_RESULTADO_INCORRETO') {
+    const purchase = norm(item.tipo_compra);
+    const rule = /\b(CPM|CPPM)\b/.test(purchase) ? 'inserções × valor unitário ÷ 1.000' : 'inserções × valor unitário';
+    parts.push(`Na célula ${location.cell}, o valor final não corresponde ao cálculo de ${rule} previsto para ${findingValue(item.tipo_compra) || 'esse tipo de compra'}. Mesmo quando a fórmula não é obrigatória para o veículo, o valor preenchido precisa fechar com esse cálculo.`);
+  }
   if (found || expected) parts.push(`Valor encontrado: ${found || 'não informado'}. Valor esperado: ${expected || 'não informado'}.`);
   if (findingValue(item.veiculo).includes('|')) parts.push('As plataformas listadas mostram a composição do total; não representam um erro separado em cada plataforma.');
   if (isPending(item)) parts.push('Esta pendência indica limite de validação, não um erro confirmado no plano.');
@@ -171,18 +191,24 @@ function findingLocation(item) {
 function findingAction(item) {
   const precise = findingLocation(item), sheet = findingValue(item.aba), expected = displayValue(item, findingValue(item.esperado, item.valor_correto));
   const location = [sheet ? `aba ${sheet}` : 'plano', precise.row !== '—' ? `linha ${precise.row}` : '', precise.column !== '—' ? `coluna ${precise.column}` : '', precise.cell !== '—' ? `célula ${precise.cell}` : ''].filter(Boolean).join(' · ');
-  if (isWarning(item)) return item.tipo_achado === 'AVISO_COMPOSICAO_KPI' ? 'Nenhuma correção é necessária. A composição fica registrada apenas como aviso.' : 'Este item é informativo e não reprova o plano.';
+  if (isWarning(item)) return item.tipo_achado === 'AVISO_COMPOSICAO_KPI' ? 'Nenhuma correção é necessária. A composição fica registrada apenas como aviso.' : item.tipo_achado === 'AVISO_ARREDONDAMENTO' ? findingValue(item.como_conferir) || 'A diferença de um centavo foi registrada, mas não reprova o plano.' : 'Este item é informativo e não reprova o plano.';
   if (isPending(item)) return 'Complete ou esclareça a informação indicada e execute uma nova auditoria. Não altere o plano apenas com base nesta pendência.';
+  if (findingValue(item.como_conferir)) return findingValue(item.como_conferir);
   const formula = formulaCandidate(item);
+  if (formula && !findingValue(item.formula_atual, item.formula_encontrada) && norm(item.tipo_achado || item.tipo) === 'FORMULA_RESULTADO_INCORRETO') return `A fórmula não é obrigatória para todos os veículos, mas o valor precisa fechar. Para corrigir automaticamente ${location}, use o cálculo de referência indicado abaixo.`;
   if (formula) return `${findingValue(item.formula_atual, item.formula_encontrada) ? 'Substitua a fórmula atual' : 'Insira a fórmula ausente'} em ${location} pela fórmula indicada abaixo.`;
   return `Confira ${location}.${expected ? ` Resultado esperado: ${expected}.` : ' O resultado esperado não foi informado; confira os dados de origem antes de alterar.'}`;
 }
 function appendFormulaComparison(card, item) {
   const expected = formulaCandidate(item) || findingValue(item.formula_esperada, item.formula_referencia), current = findingValue(item.formula_atual, item.formula_encontrada);
+  const totalRule = norm(item.tipo_achado || item.tipo).includes('TOTAL_DIVERGENTE') || /^INT-01(3|6|7|8)$/.test(findingValue(item.id_regra));
+  if (norm(item.tipo_achado || item.tipo) === 'AVISO_ARREDONDAMENTO') return;
+  if (totalRule && !expected) return;
   if (!expected && !current && !norm(item.tipo_achado || item.tipo).includes('FORMULA')) return;
   const compare = element('div', '', 'formula-compare'), currentBox = element('div', '', 'formula-box formula-current'), expectedBox = element('div', '', 'formula-box formula-correct');
   currentBox.append(element('span', 'Fórmula atual'), element('code', current ? formulaPtBr(current) : 'Sem fórmula — foi encontrado um valor manual'));
-  expectedBox.append(element('span', 'Fórmula correta'), element('code', expected ? formulaPtBr(expected) : 'O gabarito não forneceu uma fórmula aplicável'));
+  const referenceLabel = !current && norm(item.tipo_achado || item.tipo) === 'FORMULA_RESULTADO_INCORRETO' ? 'Cálculo de referência' : 'Fórmula correta';
+  expectedBox.append(element('span', referenceLabel), element('code', expected ? formulaPtBr(expected) : 'O gabarito não forneceu uma fórmula aplicável'));
   compare.append(currentBox, expectedBox); card.append(compare);
 }
 
@@ -261,7 +287,8 @@ function quickSummary(data) {
   return `Foram encontrados ${found} ${found === 1 ? 'item para revisar' : 'itens para revisar'}. Cada cartão mostra o local e a correção recomendada.` + pendingText;
 }
 function render(data) {
-  result = data; $('access-panel').hidden = true; $('result').hidden = false;
+  const normalizedDetails = Array.isArray(data.detalhes) ? data.detalhes.map(normalizeFinding) : [];
+  result = { ...data, detalhes: normalizedDetails }; data = result; $('access-panel').hidden = true; $('result').hidden = false;
   const label = labels[data.status_auditoria]; $('status-label').textContent = label[0]; $('status-detail').textContent = quickSummary(data); $('result-id').textContent = data.id_auditoria; summary(data.meta);
   const processing = ['RECEBIDO', 'EM_PROCESSAMENTO'].includes(data.status_auditoria), details = Array.isArray(data.detalhes) ? data.detalhes : [], notices = details.filter(isWarning).length, approved = approvedCount(data);
   $('approved-count').textContent = approved ?? (processing ? 'Em apuração' : '—');
