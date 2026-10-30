@@ -215,7 +215,7 @@ async function correctDrivePlan(req, res, config) {
       chave_acesso: input.chave_acesso,
       sha256_antes: output.inputHash,
       sha256_depois: output.outputHash,
-      correcao_json: JSON.stringify({ correcoes: input.correcoes, timestamp: output.timestamp, historySheet: output.historySheet }),
+      correcao_json: JSON.stringify({ correcoes: output.applied, timestamp: output.timestamp, historySheet: output.historySheet }),
     }, { name: output.fileName, bytes: outputBytes }, controller.signal);
     return json(res, 200, {
       ok: true,
@@ -224,7 +224,10 @@ async function correctDrivePlan(req, res, config) {
       sha256_antes: output.inputHash,
       sha256_depois: output.outputHash,
       link_drive: saved.link_drive,
-      original_preservado: saved.original_preservado !== false,
+      arquivo_oficial_atualizado: saved.arquivo_oficial_atualizado === true,
+      backup_original_preservado: saved.backup_original_preservado === true,
+      link_backup_original: saved.link_backup_original || '',
+      historico_registrado: saved.historico_registrado !== false,
       aplicado: output.applied,
       timestamp: output.timestamp,
     }, cors);
