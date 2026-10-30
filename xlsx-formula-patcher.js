@@ -164,12 +164,12 @@
     const workbookPath = 'xl/workbook.xml', relationshipsPath = relsPath(workbookPath);
     const workbook = text(entries, workbookPath), relationships = text(entries, relationshipsPath);
     const relations = new Map();
-    for (const match of relationships.matchAll(/<Relationship\b[^>]*\/?\s*>/gi)) {
+    for (const match of relationships.matchAll(/<(?:[A-Za-z_][\w.-]*:)?Relationship\b[^>]*\/?\s*>/gi)) {
       const id = attribute(match[0], 'Id'), target = attribute(match[0], 'Target'), type = attribute(match[0], 'Type');
       if (id && target) relations.set(id, { target: resolveTarget(workbookPath, target), type });
     }
     const sheets = [];
-    for (const match of workbook.matchAll(/<sheet\b[^>]*\/?\s*>/gi)) {
+    for (const match of workbook.matchAll(/<(?:[A-Za-z_][\w.-]*:)?sheet\b[^>]*\/?\s*>/gi)) {
       const id = attribute(match[0], 'r:id') || attribute(match[0], 'id');
       const rel = relations.get(id);
       if (rel) sheets.push({ name: attribute(match[0], 'name'), id, sheetId: Number(attribute(match[0], 'sheetId')) || 0, path: rel.target });
@@ -185,39 +185,45 @@
   function patchFormula(xml, cell, before, after) {
     const target = String(cell).replace(/\$/g, '').toUpperCase();
     let changed = false, actual = '';
-    const result = xml.replace(/<c\b[^>]*\/>|<c\b[^>]*>[\s\S]*?<\/c>/gi, block => {
-      if (changed || String(attribute(block.match(/^<c\b[^>]*>/i)?.[0] || '', 'r')).replace(/\$/g, '').toUpperCase() !== target) return block;
-      const formula = block.match(/<f\b([^>]*)>([\s\S]*?)<\/f>/i);
+    const cellPattern = /<(?:[A-Za-z_][\w.-]*:)?c\b[^>]*\/>|<(?:[A-Za-z_][\w.-]*:)?c\b[^>]*>[\s\S]*?<\/(?:[A-Za-z_][\w.-]*:)?c>/gi;
+    const result = xml.replace(cellPattern, block => {
+      const opening = block.match(/^<((?:[A-Za-z_][\w.-]*:)?c)\b[^>]*>/i)?.[0] || '';
+      if (changed || String(attribute(opening, 'r')).replace(/\$/g, '').toUpperCase() !== target) return block;
+      const cellTag = opening.match(/^<((?:[A-Za-z_][\w.-]*:)?c)\b/i)?.[1] || 'c';
+      const prefix = cellTag.includes(':') ? cellTag.slice(0, cellTag.indexOf(':') + 1) : '';
+      const formula = block.match(/<((?:[A-Za-z_][\w.-]*:)?f)\b([^>]*)>([\s\S]*?)<\/\1>/i);
       if (!formula) {
         if (String(before ?? '').trim()) fail('A célula ' + target + ' não contém a fórmula auditada. Nenhuma alteração foi feita.');
-        const opening = block.match(/^<c\b[^>]*>/i)?.[0] || '';
         const type = attribute(opening, 't').toLowerCase();
-        if (type === 's' || type === 'inlinestr' || /<is\b/i.test(block)) fail('A célula ' + target + ' contém texto e não pode receber fórmula automaticamente.');
+        if (type === 's' || type === 'inlinestr' || /<(?:[A-Za-z_][\w.-]*:)?is\b/i.test(block)) fail('A célula ' + target + ' contém texto e não pode receber fórmula automaticamente.');
         changed = true;
-        const formulaXml = '<f>' + xmlEscape(String(after).replace(/^=/, '')) + '</f>';
-        if (/\/>\s*$/i.test(block)) return block.replace(/\/>\s*$/i, '>' + formulaXml + '<v></v></c>');
-        let updated = block.replace(/^<c\b[^>]*>/i, match => match + formulaXml);
-        updated = updated.replace(/<v\b[^>]*>[\s\S]*?<\/v>/i, '<v></v>');
-        if (!/<v\b/i.test(updated)) updated = updated.replace(/<\/c>\s*$/i, '<v></v></c>');
+        const formulaXml = '<' + prefix + 'f>' + xmlEscape(String(after).replace(/^=/, '')) + '</' + prefix + 'f>';
+        if (/\/>\s*$/i.test(block)) return block.replace(/\/>\s*$/i, '>' + formulaXml + '<' + prefix + 'v></' + prefix + 'v></' + cellTag + '>');
+        let updated = block.replace(new RegExp('^<' + cellTag.replace(':', '\\:') + '\\b[^>]*>', 'i'), match => match + formulaXml);
+        updated = updated.replace(/<((?:[A-Za-z_][\w.-]*:)?v)\b[^>]*>[\s\S]*?<\/\1>/i, '<' + prefix + 'v></' + prefix + 'v>');
+        if (!/<(?:[A-Za-z_][\w.-]*:)?v\b/i.test(updated)) updated = updated.replace(new RegExp('</' + cellTag.replace(':', '\\:') + '>\\s*$', 'i'), '<' + prefix + 'v></' + prefix + 'v></' + cellTag + '>');
         return updated;
       }
-      if (/\bt\s*=\s*(["'])shared\1/i.test(formula[1])) fail('A célula ' + target + ' usa uma fórmula compartilhada e exige revisão manual.');
-      actual = xmlDecode(formula[2]);
+      if (/\bt\s*=\s*(["'])shared\1/i.test(formula[2])) fail('A célula ' + target + ' usa uma fórmula compartilhada e exige revisão manual.');
+      actual = xmlDecode(formula[3]);
       if (normalizeFormula(actual) !== normalizeFormula(before)) fail('A fórmula de ' + target + ' não corresponde à versão auditada. Nenhuma alteração foi feita.');
       changed = true;
-      let updated = block.replace(formula[0], '<f' + formula[1] + '>' + xmlEscape(String(after).replace(/^=/, '')) + '</f>');
-      updated = updated.replace(/<v\b[^>]*>[\s\S]*?<\/v>/i, '<v></v>');
+      let updated = block.replace(formula[0], '<' + formula[1] + formula[2] + '>' + xmlEscape(String(after).replace(/^=/, '')) + '</' + formula[1] + '>');
+      updated = updated.replace(/<((?:[A-Za-z_][\w.-]*:)?v)\b[^>]*>[\s\S]*?<\/\1>/i, '<' + prefix + 'v></' + prefix + 'v>');
       return updated;
     });
     if (!changed) fail('A célula ' + target + ' não foi encontrada na aba informada. Nenhuma alteração foi feita.');
     return { xml: result, actual };
   }
   function forceRecalculation(workbook) {
-    if (/<calcPr\b/i.test(workbook)) return workbook.replace(/<calcPr\b[^>]*\/?\s*>/i, match => {
-      const attrs = match.replace(/^<calcPr\b/i, '').replace(/\/?\s*>$/i, '').replace(/\s+(?:calcMode|fullCalcOnLoad|forceFullCalc)\s*=\s*(["'])[\s\S]*?\1/gi, '');
-      return '<calcPr' + attrs + ' calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>';
+    if (/<(?:[A-Za-z_][\w.-]*:)?calcPr\b/i.test(workbook)) return workbook.replace(/<((?:[A-Za-z_][\w.-]*:)?calcPr)\b[^>]*\/?\s*>/i, (match, tag) => {
+      const attrs = match.replace(new RegExp('^<' + tag.replace(':', '\\:') + '\\b', 'i'), '').replace(/\/?\s*>$/i, '').replace(/\s+(?:calcMode|fullCalcOnLoad|forceFullCalc)\s*=\s*(["'])[\s\S]*?\1/gi, '');
+      return '<' + tag + attrs + ' calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>';
     });
-    return workbook.replace(/<\/workbook>\s*$/i, '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>');
+    return workbook.replace(/<\/((?:[A-Za-z_][\w.-]*:)?workbook)>\s*$/i, (match, tag) => {
+      const prefix = tag.includes(':') ? tag.slice(0, tag.indexOf(':') + 1) : '';
+      return '<' + prefix + 'calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></' + tag + '>';
+    });
   }
   function nextWorksheetPath(entries) {
     let max = 0;
@@ -249,16 +255,22 @@
     let name = 'HISTORICO_AUDITORIA', suffix = 2;
     while (map.sheets.some(sheet => sheet.name.toLocaleUpperCase('pt-BR') === name.toLocaleUpperCase('pt-BR'))) name = 'HISTORICO_AUDITORIA_' + suffix++;
     const path = nextWorksheetPath(entries), maxSheetId = Math.max(0, ...map.sheets.map(sheet => sheet.sheetId));
-    const usedRelIds = new Set([...map.relationships.matchAll(/<Relationship\b[^>]*\/?\s*>/gi)].map(match => attribute(match[0], 'Id')));
+    const usedRelIds = new Set([...map.relationships.matchAll(/<(?:[A-Za-z_][\w.-]*:)?Relationship\b[^>]*\/?\s*>/gi)].map(match => attribute(match[0], 'Id')));
     let relNumber = 1; while (usedRelIds.has('rId' + relNumber)) relNumber++;
     const relId = 'rId' + relNumber;
     const target = path.replace(/^xl\//, '');
-    const relationship = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="' + xmlEscape(target) + '"/>';
-    const relationships = map.relationships.replace(/<\/Relationships>\s*$/i, relationship + '</Relationships>');
-    const sheet = '<sheet name="' + xmlEscape(name) + '" sheetId="' + (maxSheetId + 1) + '" r:id="' + relId + '"/>';
-    const workbook = map.workbook.replace(/<\/sheets>/i, sheet + '</sheets>');
+    const relRoot = map.relationships.match(/<((?:[A-Za-z_][\w.-]*:)?Relationships)\b/i)?.[1] || 'Relationships';
+    const relPrefix = relRoot.includes(':') ? relRoot.slice(0, relRoot.indexOf(':') + 1) : '';
+    const relationship = '<' + relPrefix + 'Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="' + xmlEscape(target) + '"/>';
+    const relationships = map.relationships.replace(new RegExp('</' + relRoot.replace(':', '\\:') + '>\\s*$', 'i'), relationship + '</' + relRoot + '>');
+    const sheetsTag = map.workbook.match(/<((?:[A-Za-z_][\w.-]*:)?sheets)\b/i)?.[1] || 'sheets';
+    const workbookPrefix = sheetsTag.includes(':') ? sheetsTag.slice(0, sheetsTag.indexOf(':') + 1) : '';
+    const sheet = '<' + workbookPrefix + 'sheet name="' + xmlEscape(name) + '" sheetId="' + (maxSheetId + 1) + '" r:id="' + relId + '"/>';
+    const workbook = map.workbook.replace(new RegExp('</' + sheetsTag.replace(':', '\\:') + '>', 'i'), sheet + '</' + sheetsTag + '>');
     let contentTypes = text(entries, '[Content_Types].xml');
-    contentTypes = contentTypes.replace(/<\/Types>\s*$/i, '<Override PartName="/' + xmlEscape(path) + '" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+    const typesRoot = contentTypes.match(/<((?:[A-Za-z_][\w.-]*:)?Types)\b/i)?.[1] || 'Types';
+    const typesPrefix = typesRoot.includes(':') ? typesRoot.slice(0, typesRoot.indexOf(':') + 1) : '';
+    contentTypes = contentTypes.replace(new RegExp('</' + typesRoot.replace(':', '\\:') + '>\\s*$', 'i'), '<' + typesPrefix + 'Override PartName="/' + xmlEscape(path) + '" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></' + typesRoot + '>');
     putText(entries, map.relationshipsPath, relationships);
     putText(entries, map.workbookPath, workbook);
     putText(entries, '[Content_Types].xml', contentTypes);
@@ -270,10 +282,9 @@
     const hash = await root.crypto.subtle.digest('SHA-256', bytes);
     return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join('');
   }
-  function correctedName(name, auditId) {
-    const safeAudit = String(auditId).replace(/[^A-Za-z0-9-]/g, '').slice(0, 50);
-    const base = String(name || 'plano.xlsx').replace(/\.xlsx$/i, '').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
-    return base + '_CORRIGIDO_' + safeAudit + '.xlsx';
+  function officialName(name) {
+    const value = String(name || 'plano.xlsx').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 160);
+    return /\.xlsx$/i.test(value) ? value : value + '.xlsx';
   }
   async function applyCorrections(file, corrections, auditId) {
     if (!file || typeof file.arrayBuffer !== 'function') fail('Selecione o PM original em formato XLSX.');
@@ -302,7 +313,9 @@
     const outputHash = await sha256(output);
     return {
       blob: new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-      fileName: correctedName(file.name, auditId),
+      // O n8n substitui o conteúdo do arquivo oficial no Drive. Manter o
+      // nome evita criar uma segunda versão como se fosse outro PM.
+      fileName: officialName(file.name),
       inputHash,
       outputHash,
       historySheet,
