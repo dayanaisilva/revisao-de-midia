@@ -94,19 +94,35 @@ function displayValue(item, value) {
 
 const findingKey = item => [item.id_achado, item.id_regra, item.aba, item.celula, item.tipo_achado || item.tipo].filter(Boolean).join('|').slice(0, 500);
 const storageKey = () => result?.id_auditoria ? 'auditoria-decisoes-v1:' + result.id_auditoria : '';
-function decisions() { try { const value = JSON.parse(localStorage.getItem(storageKey()) || '[]'); return Array.isArray(value) ? value.slice(0, 200) : []; } catch { return []; } }
+function remoteDecisions() {
+  const values = result?.historico_correcoes || result?.correcoes_aplicadas || [];
+  return Array.isArray(values) ? values.filter(item => item && typeof item === 'object').map(item => ({
+    ...item,
+    key: item.key || [item.ruleId || item.id_regra, item.sheet || item.aba, item.cell || item.celula].filter(Boolean).join('|'),
+    sheet: item.sheet || item.aba || '', cell: item.cell || item.celula || '', before: item.before || item.formula_anterior || '', after: item.after || item.formula_aplicada || '',
+    decision: item.decision || 'DRIVE_ATUALIZADO', timestamp: item.timestamp || item.data_hora || '',
+  })) : [];
+}
+function decisions() {
+  let local = []; try { const value = JSON.parse(localStorage.getItem(storageKey()) || '[]'); if (Array.isArray(value)) local = value; } catch {}
+  const merged = new Map();
+  for (const item of [...remoteDecisions(), ...local]) merged.set([item.key, item.timestamp, item.sheet, item.cell].join('|'), item);
+  return [...merged.values()].sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp))).slice(0, 200);
+}
 function saveDecisions(entries) {
   const keys = new Set(entries.map(entry => entry.key));
   try { localStorage.setItem(storageKey(), JSON.stringify([...entries, ...decisions().filter(item => !keys.has(item.key))].slice(0, 200))); } catch {}
   renderDecisionHistory(); findings();
 }
-function decisionLabel(item) { return item.decision === 'RECUSADA' ? 'Correção não aplicada' : item.decision === 'DRIVE_ATUALIZADO' ? 'PM atualizado no Drive' : item.decision === 'ORIGINAL_SUBSTITUIDO' ? 'Arquivo original alterado' : 'Cópia corrigida gerada'; }
+function decisionLabel(item) { return item.decision === 'RECUSADA' ? 'Correção não aplicada' : item.decision === 'DRIVE_ATUALIZADO' ? 'Arquivo oficial atualizado' : item.decision === 'ORIGINAL_SUBSTITUIDO' ? 'Arquivo oficial atualizado' : 'Correção registrada'; }
 function renderDecisionHistory() {
   const root = $('decision-history'), section = $('decision-history-section'); if (!root || !section) return;
   const values = decisions(); root.replaceChildren(); section.hidden = !values.length;
   for (const item of values) {
     const entry = element('div', '', 'history-entry');
-    entry.append(element('strong', decisionLabel(item)), element('span', [new Date(item.timestamp).toLocaleString('pt-BR'), item.sheet && item.cell ? `${item.sheet} · ${item.cell}` : '', item.outputHash ? `SHA-256: ${item.outputHash}` : ''].filter(Boolean).join(' · ')));
+    const when = item.timestamp && !Number.isNaN(new Date(item.timestamp).getTime()) ? new Date(item.timestamp).toLocaleString('pt-BR') : '';
+    const formula = item.sheet && item.cell ? `${item.sheet} · ${item.cell}: ${item.before ? formulaPtBr(item.before) : 'sem fórmula'} → ${formulaPtBr(item.after)}` : '';
+    entry.append(element('strong', decisionLabel(item)), element('span', [when, formula, item.outputHash ? `SHA-256: ${item.outputHash}` : ''].filter(Boolean).join(' · ')));
     root.append(entry);
   }
 }
@@ -301,7 +317,7 @@ function render(data) {
 function correctionFeedback(text) { $('correction-feedback').textContent = text; $('correction-feedback').hidden = !text; }
 function startCorrection(corrections) {
   if (correctionBusy || !Array.isArray(corrections) || !corrections.length) return; pendingCorrections = corrections; $('apply-correction').disabled = false;
-  const summary = $('correction-summary'); summary.replaceChildren(element('p', `${corrections.length} ${corrections.length === 1 ? 'correção será aplicada' : 'correções serão aplicadas'} em uma única nova versão do PM.`));
+  const summary = $('correction-summary'); summary.replaceChildren(element('p', `${corrections.length} ${corrections.length === 1 ? 'correção será aplicada' : 'correções serão aplicadas'} diretamente no arquivo oficial do PM.`));
   const list = element('ul', '', 'correction-preview');
   for (const correction of corrections.slice(0, 12)) list.append(element('li', `${correction.sheet}!${correction.cell}: ${correction.before ? formulaPtBr(correction.before) : 'sem fórmula'} → ${formulaPtBr(correction.after)}`));
   if (corrections.length > 12) list.append(element('li', `… e mais ${corrections.length - 12} correções.`));
@@ -316,18 +332,18 @@ function correctionError(code) {
 async function performDriveCorrection() {
   if (correctionBusy || !pendingCorrections.length || !credentials || !correctionEndpoint) return;
   const sample = pendingCorrections.slice(0, 8).map(item => `${item.sheet}!${item.cell}: ${item.before ? formulaPtBr(item.before) : 'sem fórmula'} → ${formulaPtBr(item.after)}`).join('\n');
-  const approved = window.confirm(`CONFIRMAÇÃO FINAL\n\nO auditor criará uma nova versão corrigida do PM no Google Drive e preservará o original.\n\n${pendingCorrections.length} ${pendingCorrections.length === 1 ? 'correção selecionada' : 'correções selecionadas'}:\n${sample}${pendingCorrections.length > 8 ? `\n… e mais ${pendingCorrections.length - 8}.` : ''}\n\nDeseja aplicar?`);
+  const approved = window.confirm(`CONFIRMAÇÃO FINAL\n\nO auditor fará um backup de segurança antes da primeira alteração e atualizará o próprio arquivo oficial no Google Drive, mantendo o mesmo link.\n\n${pendingCorrections.length} ${pendingCorrections.length === 1 ? 'correção selecionada' : 'correções selecionadas'}:\n${sample}${pendingCorrections.length > 8 ? `\n… e mais ${pendingCorrections.length - 8}.` : ''}\n\nDeseja aplicar?`);
   if (!approved) { correctionFeedback('Correção cancelada. Nenhum arquivo foi alterado.'); return; }
-  correctionBusy = true; $('apply-correction').disabled = true; $('cancel-correction').disabled = true; renderBatchControls(); correctionFeedback('Conferindo cada célula e salvando uma nova versão rastreável no Drive…');
+  correctionBusy = true; $('apply-correction').disabled = true; $('cancel-correction').disabled = true; renderBatchControls(); correctionFeedback('Criando o backup quando necessário, conferindo cada célula e atualizando o arquivo oficial…');
   const abort = new AbortController(), timeout = setTimeout(() => abort.abort(), 130000), submitted = pendingCorrections.slice();
   try {
     const response = await fetch(correctionEndpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id_auditoria: credentials.id_auditoria, chave_acesso: credentials.chave_acesso, correcoes: submitted }), credentials: 'omit', redirect: 'error', cache: 'no-store', referrerPolicy: 'no-referrer', signal: abort.signal });
     let data = null; try { data = await response.json(); } catch {}
     if (!response.ok || data?.ok !== true) throw Error(data?.error || 'CORRECAO_INDISPONIVEL');
     const timestamp = data.timestamp || new Date().toISOString();
-    saveDecisions(submitted.map(correction => ({ ...correction, decision: 'DRIVE_ATUALIZADO', timestamp, inputHash: data.sha256_antes, outputHash: data.sha256_depois, fileName: data.nome_arquivo, driveLink: data.link_drive })));
+    saveDecisions(submitted.map(correction => ({ ...correction, decision: 'DRIVE_ATUALIZADO', timestamp, inputHash: data.sha256_antes, outputHash: data.sha256_depois, fileName: data.nome_arquivo, driveLink: data.link_drive, backupLink: data.link_backup_original || '' })));
     for (const correction of submitted) selectedCorrections.delete(correction.key);
-    message(`${submitted.length} ${submitted.length === 1 ? 'fórmula atualizada' : 'fórmulas atualizadas'} no Drive. O original foi preservado e o histórico foi gravado no PM.`); closeCorrection(true);
+    message(`${submitted.length} ${submitted.length === 1 ? 'fórmula atualizada' : 'fórmulas atualizadas'} no arquivo oficial. O link foi mantido, o backup de segurança está preservado e o histórico foi gravado no PM.`); closeCorrection(true);
   } catch (error) { correctionFeedback(error?.name === 'AbortError' ? correctionError('CORRECAO_DEMOROU_DEMAIS') : correctionError(error?.message)); }
   finally { clearTimeout(timeout); correctionBusy = false; $('cancel-correction').disabled = false; $('apply-correction').disabled = false; renderBatchControls(); }
 }
